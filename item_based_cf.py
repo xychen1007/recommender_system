@@ -67,9 +67,12 @@ class ItemBasedCF():
             pred_df[i][:] = mean_item[i]
             neighbor_indice = indices[i][1:]
             for j in range(len(pred_df[i])):
-                pred_df[i][j] += np.nansum(self.similarity_matrix[i][neighbor_indice] * (
-                            self.train_set[:, j][neighbor_indice] - mean_item[neighbor_indice])) / np.sum(
-                    self.similarity_matrix[i][neighbor_indice])
+                if np.isnan(self.train_set[i][j]):
+                    pred_df[i][j] += np.nansum(self.similarity_matrix[i][neighbor_indice] * (
+                                self.train_set[:, j][neighbor_indice] - mean_item[neighbor_indice])) / np.sum(
+                        self.similarity_matrix[i][neighbor_indice])
+                else:
+                    pred_df[i][j] = np.nan
         return pred_df
 
 import numpy as np
