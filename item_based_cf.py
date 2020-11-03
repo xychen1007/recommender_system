@@ -3,6 +3,22 @@ import numpy as np
 from sklearn.neighbors import NearestNeighbors
 
 
+def sample_df(df, min_item=300, min_user=6800):
+    countItem = df[['movieId', 'rating']].groupby(['movieId']).count()
+    countUser = df[['userId', 'rating']].groupby(['userId']).count()
+
+    selectedItemId = countItem.loc[countItem['rating'] > min_user].index
+    selectedUserId = countUser.loc[countUser['rating'] > min_item].index
+
+    n_users = len(selectedUserId)
+    n_items = len(selectedItemId)
+    print(f'number of users: {n_users}')
+    print(f'number of items: {n_items}')
+    df_sample = df.loc[(df['movieId'].isin(selectedItemId)) & (df['userId']).isin(selectedUserId)]
+    print(f'shape of sampled df: {df_sample.shape}')
+    return df_sample
+
+
 def pearson_similarity(vec1, vec2):
     mean_vec1 = np.nanmean(vec1)
     mean_vec2 = np.nanmean(vec2)
@@ -17,7 +33,7 @@ def pearson_similarity(vec1, vec2):
     return numerator/np.sqrt(denominator1*denominator2)
 
 
-def consine_similarity(vec1, vec2):
+def cosine_similarity(vec1, vec2):
     numerator = 0
     denominator1 = 0
     denominator2 = 0
@@ -38,10 +54,10 @@ def sim_matrix(data, metric):
                 sim_matrix[i][j] = pearson_similarity(data[i], data[j])
                 sim_matrix[j][i] = sim_matrix[i][j]
     elif metric == 'cosine':
-        for i in range(len(data)):
+        for i in range(len(sim_matrix)):
             sim_matrix[i][i] = 1
-            for j in range(i+1, len(data[i])):
-                sim_matrix[i][j] = pearson_similarity(data[i], data[j])
+            for j in range(i+1, len(sim_matrix[i])):
+                sim_matrix[i][j] = cosine_similarity(data[i], data[j])
                 sim_matrix[j][i] = sim_matrix[i][j]
     return sim_matrix
 
@@ -75,49 +91,30 @@ class ItemBasedCF():
                     pred_df[i][j] = np.nan
         return pred_df
 
-import numpy as np
-import pandas as pd
-from sklearn.model_selection import train_test_split
 
-df = pd.read_csv('./ml-latest/ratings.csv')
-df.drop("timestamp", inplace=True, axis=1)
+if __name__ == "__main__":
+    import numpy as np
+    import pandas as pd
+    from sklearn.model_selection import train_test_split
 
-def sample_df(df, min_item=300, min_user=6800):
-    countItem = df[['movieId', 'rating']].groupby(['movieId']).count()
-    countUser = df[['userId', 'rating']].groupby(['userId']).count()
+    df = pd.read_csv('./ml-latest/ratings.csv')
+    df.drop("timestamp", inplace=True, axis=1)
 
-    selectedItemId = countItem.loc[countItem['rating'] > min_user].index
-    selectedUserId = countUser.loc[countUser['rating'] > min_item].index
+    df_sample = sample_df(df)
+    train_set, test_set = train_test_split(df_sample, test_size=0.50)
+    train_set, valid_set = train_test_split(train_set, test_size=0.2)
+    rating_matrix_train = train_set.pivot(index='movieId', columns='userId', values='rating')
+    rating_matrix_test = test_set.pivot(index='movieId', columns='userId', values='rating')
 
-    n_users = len(selectedUserId)
-    n_items = len(selectedItemId)
-    print(f'number of users: {n_users}')
-    print(f'number of items: {n_items}')
-    df_sample = df.loc[(df['movieId'].isin(selectedItemId))&(df['userId']).isin(selectedUserId)]
-    print(f'shape of sampled df: {df_sample.shape}')
-    return df_sample
+    model1 = ItemBasedCF(10, 'pearson')
 
-df_sample = sample_df(df)
-train_set, test_set = train_test_split(df_sample, test_size=0.50)
-train_set, valid_set = train_test_split(train_set, test_size=0.2)
-rating_matrix_train = train_set.pivot(index='movieId', columns='userId', values='rating')
-rating_matrix_test = test_set.pivot(index='movieId', columns='userId', values='rating')
+    import time
+    start = time.time()
+    model1.train(rating_matrix_train)
+    end = time.time()
+    print(f'training_time{end-start}')
 
-train_set, test_set = train_test_split(df_sample, test_size=0.50)
-train_set, valid_set = train_test_split(train_set, test_size=0.2)
-
-rating_matrix_train = train_set.pivot(index='movieId', columns='userId', values='rating')
-rating_matrix_test = test_set.pivot(index='movieId', columns='userId', values='rating')
-
-model1 = ItemBasedCF(10, 'pearson')
-
-import time
-start = time.time()
-model1.train(rating_matrix_train)
-end = time.time()
-print(f'training_time{end-start}')
-
-start = time.time()
-pred_set = model1.predict(rating_matrix_test)
-end = time.time()
-print(f'predicting_time{end-start}')
+    start = time.time()
+    pred_set = model1.predict(rating_matrix_test)
+    end = time.time()
+    print(f'predicting_time{end-start}')
